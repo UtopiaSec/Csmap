@@ -1,0 +1,140 @@
+logo := `
+----------------------------------------
+____ ____ _  _ ____ ___  
+|    [__  |\/| |__| |__] 
+|___ ___] |  | |  | |    
+                               v1.0
+                --作者 乌托邦安全团队CV
+----------------------------------------
+`
+println(logo)
+log.setLevel("info")
+log.info("Csmap  --作者 乌托邦安全团队CV")
+//设置使用参数
+model = cli.String("model")
+
+if model == "" || (model != "scan" && model != "vul" && model != "quake" && model != "blapa" && model != "crawler") {
+    println(`
+参数信息:
+--model scan参数信息收集模块/vul参数漏洞扫描模块/quake参数网络空间引擎模块/blapa参数目录爆破模块/crawler参数网站URL爬虫模块
+scan    --target 目标IP/域名
+        --ports 指定端口号
+        --switch 扫描域名时是否启动IP端口扫描(up(默认)/off)
+        --thread 设置线程
+        --proxy 设置代理
+        --det 仅探测主机存活(默认false/true->关闭/开启)
+        --way 设置扫描方式(flase默认/true->被动/主动)
+        --status 设置扫描状态(serve默认/syn->TCP精准扫描/syn半开扫描,syn扫描不稳定)
+注意:status参数选择syn半开扫描需要使用admin/root权限,syn模式不能扫描127.0.0.1
+vul     --target 目标IP/域名(可以带端口号)
+        --poc  指定漏洞PoC(不填写此参数，默认全面扫描)
+        --thread 设置线程
+        --proxy 设置代理(URL,注意:不能是单独的IP/域名)
+quake   --inquire 搜索内容
+        --ste 选择搜索引擎(FOFA,360Quake,Shodan)
+        --count 获取的数据量(默认100条,最大1万条,FOFA/Shodan最低获取100条)
+blapa   --ua 设置UserAgent参数(默认是百度爬虫头)
+        --target 目标IP/域名
+        --dic 设置爆破字典(默认asp,php,db,jsp,robot)
+        --proxy 设置代理
+        --scode 设置需要收集相应状态码的目录爆破数据
+        --thmod 选择单/多线程(默认单线程single/mult,多线程模式爆破路径精准度比单线程低)
+        --thread 设置线程数量(默认10线程)
+crawler --ua 设置UserAgent参数(默认是百度爬虫头)
+        --target 目标IP/域名/URL
+        --proxy 设置代理
+        --count 获取的最大数据量(默认1000条)
+        --cur 并发量(设置最多多少http请求发送出去)
+注意:此模块是非浏览器模块,如果遇见防非浏览器爬虫的网站,则此模块功能失效,即获取不到URL
+
+功能模块通用参数 
+--dir 设置批量扫描TXT文件路径(相对路径)
+--unite 设置联动接口文件是否启动(up/off,默认off)
+        (vul漏扫模式和blapa目录爆破模式没有联动接口文件)
+
+扫描结果默认存放位置:./日志
+网络空间搜索引擎API-KEY配置文件位置:./WSSE-config/config.txt
+字典存放路径：./Dictionary
+`)
+}else{
+    if !file.IsDir("./日志") {file.Mkdir("日志")}
+    hms = str.Split(datetime()," ")[1]
+    flag = date() + "-" +str.Split(hms,":")[0]+"-"+str.Split(hms,":")[1]+"-"+str.Split(hms,":")[2]
+    dir = cli.String("dir")
+    unite = cli.String("unite",cli.setDefault("off"))
+    
+    //信息收集模块
+    if model == "scan" {
+        targets = cli.String("target")
+        scanTargets = str.Split(targets,",")
+        ports = cli.String("ports", cli.setDefault("1-100,443,445,1433,1521,3306,5432,6379,8080,8088,8161,27017"))
+        unite = cli.String("unite",cli.setDefault("off"))
+        thread = cli.Int("thread",cli.setDefault(200))
+        sw = cli.String("switch", cli.setDefault("up"))
+        det = cli.Bool("det", cli.setDefault(false))
+        way = cli.Bool("way", cli.setDefault(false))
+        status = cli.String("status", cli.setDefault("serve"))
+        proxy = cli.String("proxy")
+        cmd,err = dyn.Import("./插件/portscan", "scan")
+        die(err)
+        cmd.Value(scanTargets,ports,dir,thread,sw,flag,unite,proxy,status,way,det)
+        
+    }
+    //网络空间搜索引擎模块
+    if model == "quake" {
+        inquire = cli.String("inquire")
+        ste = cli.String("ste")
+        count = cli.Int("count")
+        unite = cli.String("unite",cli.setDefault("off"))
+        cmd,err = dyn.Import("./插件/quake", "scan")
+        die(err)
+        cmd.Value(inquire,dir,ste,count,flag,unite)
+    }
+    //漏洞扫描模块
+    if model == "vul" {
+        targets = cli.String("target")
+        scanTargets = str.ParseStringToHosts(targets)
+        poc = cli.String("poc")
+        thread = cli.Int("thread",cli.setDefault(200))
+        proxy = cli.String("proxy")
+        cmd,err = dyn.Import("./插件/vul", "scan")
+        die(err)
+        cmd.Value(scanTargets,dir,poc,thread,flag,proxy)
+    }
+    //目录爆破模块
+    if model == "blapa"{
+        ua = cli.String("ua", cli.setDefault("Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html"))
+        targets = cli.String("target")
+        dic = cli.String("dic", cli.setDefault("asp,php,jsp,robot"))
+        proxy = cli.String("proxy")
+        scord = cli.Int("scord", cli.setDefault(200))
+        thmod = cli.String("thmod", cli.setDefault("single"))
+        if thmod == "single" {
+            cmd,err = dyn.Import("./插件/blapa", "scan")
+            die(err)
+            cmd.Value(ua,targets,dir,dic,proxy,flag,scord)
+        }else{
+            if thmod == "mult"{
+                thread = cli.Int("thread",cli.setDefault(10))
+                cmd,err = dyn.Import("./插件/blath", "scan")
+                die(err)
+                cmd.Value(ua,targets,dir,dic,proxy,flag,scord,thread)
+            }else{
+                log.error("thmod参数错误,single/mult->单/多线程")
+            }
+        }
+    }
+    //网站URL爬虫模块
+    if model == "crawler"{
+        ua = cli.String("ua", cli.setDefault("Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html"))
+        target = cli.String("target")
+        scanTargets = str.ParseStringToHosts(target)
+        dir = cli.String("dir")
+        current = cli.Int("cur", cli.setDefault(100))
+        proxy = cli.String("proxy")
+        count = cli.Int("count", cli.setDefault(1000))
+        cmd,err = dyn.Import("./插件/crawler", "scan")
+        die(err)    
+        cmd.Value(ua,scanTargets,dir,current,count,proxy,flag)
+    }
+}

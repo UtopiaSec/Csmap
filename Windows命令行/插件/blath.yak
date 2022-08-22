@@ -1,0 +1,148 @@
+log.setLevel("info")
+//目录爆破
+blastpath = func(ua,targetIP,path,proxy,scord,blastresult,thread,path_now){
+    thd = sync.NewSizedWaitGroup(thread)
+
+handleResult = func(ua,targetIP,path,proxy,scord,blastresult,thread,thd,path_now) {
+    thd.Add()
+    go func{
+        defer thd.Done()
+        defer func{err = recover(); if err != nil {log.Error("recover函数错误原因: %v", err)}}
+        addr = targetIP
+    if proxy == ""{
+            resultResponse, req, err = poc.HTTP(`GET {{params(path)}} HTTP/1.1
+Host: {{params(target)}}
+User-Agent: {{params(ua)}}
+`, poc.params({
+    "path": path_now+path, 
+    "target": addr,
+    "ua": ua, 
+}),poc.timeout(60))}else{
+        resultResponse, req, err = poc.HTTP(`GET {{params(path)}} HTTP/1.1
+Host: {{params(target)}}
+User-Agent: {{params(ua)}}
+`, poc.params({
+    "path": path_now+path, 
+    "target": addr,
+    "ua": ua, 
+}), poc.timeout(60),poc.proxy(proxy))
+}
+        if err != nil && sprint(err) != "<nil>" {
+            err = sprint(err)
+            log.Error(err)
+            if str.MatchAnyOfRegexp(err, "no such host", "reset by remote peer") {
+                if err == "no such host"{
+                log.Error("目标IP非法")}
+                if err == "reset by remote peer"{
+                log.Error("远程访问错误")}
+            }
+        }
+        res, err := poc.ParseBytesToHTTPResponse(resultResponse)
+        if res != nil {
+            log.info("[%d] IP地址:%s 爆破路径:%s", res.StatusCode,targetIP,path_now+path)
+            if res.StatusCode == scord {
+                blastresult.Write(sprintf("		<tr><td>%d</td><td>%s</td></tr>",res.StatusCode,targetIP+path_now+path))}
+            }
+}
+}
+thd.Wait()
+handleResult(ua,targetIP,path,proxy,scord,blastresult,thread,thd,path_now+path)
+}
+
+scan = func(ua,targets,dir,dic,proxy,flag,scord,thread){
+    scanTargets = str.ParseStringToHosts(targets)
+    blast = 0
+    if dir == ""{
+        if len(scanTargets) <= 0 {
+            die("target参数为空,目标IP/域名为空")
+        }
+        if len(scanTargets) == 1 {
+            for _,fun = range scanTargets{
+            fun = str.ReplaceAll(fun,"/","-")
+            fun = str.ReplaceAll(fun,":","-")
+            fun = str.ReplaceAll(fun,"?","-")
+                blastName = "./日志/目录爆破结果"+"-"+fun+"-"+flag+".html"}
+        }else{blastName = "./日志/批量目录爆破结果"+"-"+flag+".html"}
+    }else{
+        rdir,err = file.ReadFile(dir)
+        die(err)
+        result = string(rdir)
+        scanTargets = make([]string)
+        scanTargets = str.ParseStringToLines(result)
+        blastName = "./日志/批量目录爆破结果"+"-"+flag+".html"
+    }
+
+    blastresult, err = file.Open(blastName)
+    die(err)
+    blastresult.Write(`
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<title></title>
+		<style type="text/css">
+			table{
+				border-collapse: collapse;
+			}
+			
+			table tr th{
+				border: solid 1px #ccc;
+				height: 30px;
+				width: 200px;
+				background-color: #eee;
+			}
+			
+			table tr td{
+				border: solid 1px #ccc;
+				height: 30px;
+				text-align: center;
+			}
+			
+			table tr:hover
+			{
+				background-color: red;
+			}
+		</style>
+	</head>
+	<body bgcolor="gray">
+	<h1 align="center">目标爆破结果报告</h1>
+	<h4 align="right">--by CV</h4>
+	<table border="0" cellspacing="0" cellpadding="0" align="center">
+		<tr><th>状态码</th><th>爆破路径</th></tr>
+`)
+    dict = str.Split(dic, ",")
+    for _, targetIP = range scanTargets {
+        path_now = ""
+        if str.IsHttpURL(targetIP){
+        head = str.Split(targetIP, "//")
+        IP = str.Split(head[1], "/")
+            for _,f = range(IP){
+                if f != IP[0]{
+                    path_now = path_now + "/" + f
+                }
+            }
+        targetIP = IP[0]
+        }
+        for _,dname = range dict{
+            rdic,err = file.ReadFile(sprintf("./Dictionary/%s.txt",dname))
+            die(err)
+            for _,path = range str.ParseStringToLines(string(rdic)){
+                
+                        if !str.Contains(targetIP,"."){
+                            log.info("非法目标,跳过扫描")
+                            continue
+                        }
+                        blastpath(ua,targetIP,path,proxy,scord,blastresult,thread,path_now)
+                        blast=blast + 1
+                    }
+            }
+    }
+            if blast != 0 {
+                log.info("扫描报告已生成,查看路径:%v", blastName)
+                blastresult.Write(`
+    </table>	
+    </body>
+</html>
+`)  
+            }
+}

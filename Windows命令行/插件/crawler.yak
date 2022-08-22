@@ -1,0 +1,89 @@
+log.setLevel("info")
+//爬虫模块
+crawl = func (ua,target,current,count,proxy,crawl,crawlerresult){
+if proxy != ""{
+    res, err = crawler.Start(target,crawler.ua(ua),crawler.proxy(proxy),crawler.timeout(3),crawler.concurrent(current),crawler.maxRequest(count))
+    die(err)
+}else{
+    res, err = crawler.Start(target,crawler.ua(ua),crawler.timeout(3),crawler.concurrent(current),crawler.maxRequest(count))
+    die(err)
+}
+for result := range res {
+    log.info("爬取URL:%s",result.Url())
+    crawlerresult.Write(sprintf(`		<tr><td>%s</td><td><a href = "%s">%s</td></tr>`,target,result.Url(),result.Url()))
+}
+}
+
+scan = func(ua,scanTargets,dir,current,count,proxy,flag){
+if dir == ""{
+    if len(scanTargets) <= 0 {
+        die("target参数为空,目标IP/域名为空")
+    }
+    if len(scanTargets) == 1 {
+        for _,fun = range scanTargets{
+            fun = str.ReplaceAll(fun,"/","-")
+            fun = str.ReplaceAll(fun,":","-")
+            fun = str.ReplaceAll(fun,"?","-")
+            crawlerName = "./日志/网站URL爬取结果"+"-"+fun+"-"+flag+".html"}
+}else{
+    crawlerName = "./日志/批量网站URL爬取结果"+"-"+flag+".html"}
+}else{
+    rdir,err = file.ReadFile(dir)
+    die(err)
+    result = string(rdir)
+    scanTargets = make([]string)
+    scanTargets = str.ParseStringToLines(result)
+    crawlerName = "./日志/批量网站URL爬取结果"+"-"+flag+".html"
+}
+    crawlerresult, err = file.Open(crawlerName)
+    die(err)
+    crawlerresult.Write(`
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<title></title>
+		<style type="text/css">
+			table{
+				border-collapse: collapse;
+			}
+			
+			table tr th{
+				border: solid 1px #ccc;
+				height: 30px;
+				width: 200px;
+				background-color: #eee;
+			}
+			
+			table tr td{
+				border: solid 1px #ccc;
+				height: 30px;
+				text-align: center;
+			}
+			
+			table tr:hover
+			{
+				background-color: red;
+			}
+		</style>
+	</head>
+	<body bgcolor="gray">
+	<h1 align="center">URL爬取结果报告</h1>
+	<h4 align="right">--by CV</h4>
+	<table border="0" cellspacing="0" cellpadding="0" align="center">
+		<tr><th>目标URL</th><th>网站内容包含URL</th></tr>
+`)
+for _,url_target = range scanTargets{
+    res = str.ParseStringToUrls(url_target)
+for _,result = range res{
+    log.info("爬取目标为 -> %s",result)
+    crawl(ua,result,current,count,proxy,crawl,crawlerresult)
+}
+}
+crawlerresult.Write(`
+        </table>	
+    </body>
+</html>
+`)
+log.info("扫描报告已生成,查看路径:%v", crawlerName)
+}

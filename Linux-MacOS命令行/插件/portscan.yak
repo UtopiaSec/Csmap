@@ -1,0 +1,479 @@
+log.setLevel("info")
+//IP扫描
+scanIPTargets = func(targetIP,ports,thread,portResult,unite,flag,proxy,status,way,det) {
+    if unite == "up" {
+        portUNI = "./日志/IP扫描引擎联动接口数据"+flag+".txt"
+        portUNIResult, err = file.Open(portUNI)
+        die(err)
+        defer portUNIResult.Close()
+    }else{
+        if unite != "off"{
+            die("unite参数错误,非法字符(只能选择up/off)")
+        }
+    }
+    log.info("开始扫描目标：%v", targetIP)
+    if len(proxy) == 0 {
+        if det {
+            result = ping.Scan(targetIP,ping.concurrent(255),ping.timeout(3))
+        }else{
+            if status == "serve"{
+                res, err := servicescan.Scan(targetIP, ports,servicescan.active(way),servicescan.all(),servicescan.concurrent(thread))
+            }else{ 
+                if status == "syn"{
+                    synresult, err := synscan.Scan(targetIP, ports)
+                    res, err := servicescan.ScanFromSynResult(synresult,servicescan.active(way),servicescan.all(),servicescan.concurrent(thread))
+                }else{
+                    die("status参数错误,serve/syn->全开/半开扫描模式")
+                    }
+            }
+        }
+    }else{
+        if det {
+             result = ping.Scan(targetIP,ping.concurrent(255),ping.timeout(3),ping.proxy(proxy))
+        }else{
+                if status == "serve"{
+                    res, err := servicescan.Scan(targetIP, ports,servicescan.active(true),servicescan.all(),servicescan.concurrent(thread),servicescan.proxy(proxy))
+                }else{
+                if status == "syn"{
+                    synresult, err := synscan.Scan(targetIP, ports)
+                    res, err := servicescan.ScanFromSynResult(synresult,servicescan.active(true),servicescan.all(),servicescan.concurrent(thread),servicescan.proxy(proxy))
+                }else{
+                    die("status参数错误,serve/syn->全开/半开扫描模式")}
+            }
+        }
+    }
+    if !det {
+            if err != nil {
+        log.error("扫描目标IP：%v 端口号：%v 失败原因：%s", targetIP, ports, err)
+        return
+    }
+    for result := range res {
+        defer fn{
+            err = recover()
+            if err != nil {
+                log.error("指纹扫描出错，失败原因", err)
+            }
+        }
+        log.debug("%v 已扫描", result.String())
+        if result.IsOpen() {
+            log.info("IP地址:%s  端口状态:%s 指纹:%s", str.HostPort(result.Target, result.Port), parseStr(result.State), result.GetServiceName())
+            portResult.WriteLine(sprintf("		<tr><td>%s</td><td>%d</td><td>%s</td><td>%s</td></tr>", result.Target,result.Port, parseStr(result.State), result.GetServiceName()))
+            if unite == "up" {
+                portUNIResult.WriteLine(str.HostPort(result.Target, result.Port))}
+        }
+    }
+    }else{
+        for res = range result{
+            if res.Ok {
+            log.info("存活主机IP:%s",res.IP)
+            portResult.WriteLine(sprintf("		<tr><td>%s</td></tr>",res.IP))
+            if unite == "up" {
+                portUNIResult.WriteLine(res.IP)}
+            }
+        }
+    }
+}
+//子域名爆破
+scanDomain = func(target,ports,thread,sw,portResult,domainResult,unite,flag,proxy,status,way,det) {
+    if unite == "up" {
+        domainUNI = "./日志/子域名收集引擎联动接口数据"+flag+".txt"
+        domainUNIResult, err = file.Open(domainUNI)
+        die(err)
+        defer domainUNIResult.Close()
+    }else{
+    if unite != "off"{
+        die("unite参数错误,非法字符(只能选择up/off)")
+    }
+    }
+    log.info("开始扫描域名%v 相关子域名", target)
+    defer fn{
+        err = recover()
+        if err != nil {
+            log.error("域名扫描出错，失败原因", err)
+        }
+    }
+
+    res, err = subdomain.Scan(target, subdomain.recursive(true),subdomain.wildcardToStop(true),subdomain.targetConcurrent(thread))
+    if err != nil {
+        log.error("域名%s 扫描错误：%s", target, err)
+        return
+    }
+
+    for result := range res {
+        log.info(sprintf("子域名:%s -> IP:%s",result.Domain,result.IP))
+        domainResult.WriteLine(sprintf("		<tr><td>%s</td><td>%s</td><td>%s</td></tr>", target,result.Domain,result.IP))
+        if unite == "up" {
+            domainUNIResult.WriteLine(result.Domain)
+        }
+        if sw == "up" {
+            scanIPTargets(result.IP,ports,thread,portResult,unite,flag,proxy,status,way,det)
+        }else{
+            if sw == "off" {
+                continue
+            }else{
+                log.error("switch参数错误,非法字符(只能选择up/off)")
+            }
+        }
+    }
+}
+scan = func(scanTargets,ports,dir,thread,sw,flag,unite,proxy,status,way,det){
+    if dir == ""{
+        if len(scanTargets) <= 0 {
+            die("target参数为空,目标IP/域名为空")
+        }
+        if len(scanTargets) == 1 {
+            for _,fun = range scanTargets {
+             fun = str.ReplaceAll(fun,"/","-")
+             fun = str.ReplaceAll(fun,":","-")
+             fun = str.ReplaceAll(fun,"?","-")
+                portFileName = "./日志/IP扫描结果"+"-"+fun+"-"+flag+".html"
+                domainFileName = "./日志/子域名爆破结果"+"-"+fun+"-"+flag+".html"}
+        }else{        
+            portFileName = "./日志/IP批量扫描结果"+"-"+flag+".html"
+            domainFileName = "./日志/子域名批量爆破结果"+"-"+flag+".html"}
+    }else{
+        rdir,err = file.ReadFile(dir)
+        die(err)
+        result = string(rdir)
+        scanTargets = make([]string)
+        scanTargets = str.ParseStringToLines(result)
+        portFileName = "./日志/IP批量扫描结果"+"-"+flag+".html"
+        domainFileName = "./日志/子域名批量爆破结果"+"-"+flag+".html"
+    }
+    judge = 0
+    port = 0
+    domain = 0
+    if len(scanTargets) > 1{
+        for _,fun = range scanTargets {
+        if str.IsIPv4(fun)||str.Contains(fun, "/") {port = 1}else{if str.Contains(fun,".")&&!str.Contains(fun, "/") {domain = 1}}
+        }
+        if port ==1 {
+            portResult, err = file.Open(portFileName)
+            die(err)
+            defer portResult.Close()
+            judge = judge+1
+            if !det {
+                    portResult.Write(`
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+    <style type="text/css">
+        table{
+            border-collapse: collapse;
+        }
+                
+        table tr th{
+            border: solid 1px #ccc;
+            height: 30px;
+            width: 200px;
+            background-color: #eee;
+        }
+                
+        table tr td{
+            border: solid 1px #ccc;
+            height: 30px;
+            text-align: center;
+        }
+         
+        table tr:hover
+        {
+            background-color: red;
+        }
+    </style>
+</head>
+<body bgcolor="gray">
+<h1 align="center">IP端口结果报告</h1>
+<h4 align="right">--by CV</h4>
+<table border="0" cellspacing="0" cellpadding="0" align="center">
+    <tr><th>IP</th><th>端口</th><th>状态</th><th>指纹</th></tr>
+    `)
+                }else{
+                   portResult.Write(`
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+    <style type="text/css">
+        table{
+            border-collapse: collapse;
+        }
+                
+        table tr th{
+            border: solid 1px #ccc;
+            height: 30px;
+            width: 200px;
+            background-color: #eee;
+        }
+                
+        table tr td{
+            border: solid 1px #ccc;
+            height: 30px;
+            text-align: center;
+        }
+         
+        table tr:hover
+        {
+            background-color: red;
+        }
+    </style>
+</head>
+<body bgcolor="gray">
+<h1 align="center">IP存活结果报告</h1>
+<h4 align="right">--by CV</h4>
+<table border="0" cellspacing="0" cellpadding="0" align="center">
+    <tr><th>存活主机IP</th></tr>
+    `) 
+            }
+                }
+    if domain ==1 {
+        domainResult, err = file.Open(domainFileName)
+        die(err)
+        defer domainResult.Close()
+        judge = judge+1
+        domainResult.Write(`
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title></title>
+        <style type="text/css">
+            table{
+                border-collapse: collapse;
+            }
+            
+            table tr th{
+                border: solid 1px #ccc;
+                height: 30px;
+                width: 200px;
+                background-color: #eee;
+            }
+                    
+            table tr td{
+                border: solid 1px #ccc;
+                height: 30px;
+                ext-align: center;
+            }
+                    
+            table tr:hover
+            {
+                background-color: red;
+            }
+        </style>
+    </head>
+    <body bgcolor="gray">
+    <h1 align="center">子域名收集结果报告</h1>
+    <h4 align="right">--by CV</h4>
+    <table border="0" cellspacing="0" cellpadding="0" align="center">
+        <tr><th>目标域名</th><th>子域名</th><th>IP</th></tr>
+`)}
+    }
+    for _, targetIP = range scanTargets {
+        host,port,err = str.ParseStringToHostPort(targetIP)
+        if err != nil {
+            IPrange = str.Split(targetIP,"/")
+            if str.IsIPv4(IPrange[0]){
+                host = IPrange[0]
+                if len(IPrange) > 1 {ran = IPrange[1]}
+            }else{
+                host = IPrange[0]
+                ran = ""
+            }
+        }
+        if str.IsIPv4(host) {
+            if judge == 0{
+                portResult, err = file.Open(portFileName)
+                die(err)
+                defer portResult.Close()
+                port++
+                if !det {
+                    portResult.Write(`
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+    <style type="text/css">
+        table{
+            border-collapse: collapse;
+        }
+                
+        table tr th{
+            border: solid 1px #ccc;
+            height: 30px;
+            width: 200px;
+            background-color: #eee;
+        }
+                
+        table tr td{
+            border: solid 1px #ccc;
+            height: 30px;
+            text-align: center;
+        }
+         
+        table tr:hover
+        {
+            background-color: red;
+        }
+    </style>
+</head>
+<body bgcolor="gray">
+<h1 align="center">IP端口结果报告</h1>
+<h4 align="right">--by CV</h4>
+<table border="0" cellspacing="0" cellpadding="0" align="center">
+    <tr><th>IP</th><th>端口</th><th>状态</th><th>指纹</th></tr>
+    `)
+                }else{
+                   portResult.Write(`
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+    <style type="text/css">
+        table{
+            border-collapse: collapse;
+        }
+                
+        table tr th{
+            border: solid 1px #ccc;
+            height: 30px;
+            width: 200px;
+            background-color: #eee;
+        }
+                
+        table tr td{
+            border: solid 1px #ccc;
+            height: 30px;
+            text-align: center;
+        }
+         
+        table tr:hover
+        {
+            background-color: red;
+        }
+    </style>
+</head>
+<body bgcolor="gray">
+<h1 align="center">IP存活结果报告</h1>
+<h4 align="right">--by CV</h4>
+<table border="0" cellspacing="0" cellpadding="0" align="center">
+    <tr><th>主机存活IP</th></tr>
+    `) 
+                }
+                }
+                if len(ran) != 0 {host = host + "/" +ran}
+                scanIPTargets(host,ports,thread,portResult,unite,flag,proxy,status,way,det)
+
+        }else{
+            if !str.Contains(host,".")&&len(ran) != 0 {
+                log.info("非法目标,跳过扫描")
+                continue
+            }else{
+                if judge == 0{
+                    domainResult, err = file.Open(domainFileName)
+                    die(err)
+                    defer domainResult.Close()
+                    domain++
+                    domainResult.Write(`
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title></title>
+        <style type="text/css">
+            table{
+                border-collapse: collapse;
+            }
+            
+            table tr th{
+                border: solid 1px #ccc;
+                height: 30px;
+                width: 200px;
+                background-color: #eee;
+            }
+                    
+            table tr td{
+                border: solid 1px #ccc;
+                height: 30px;
+                ext-align: center;
+            }
+                    
+            table tr:hover
+            {
+                background-color: red;
+            }
+        </style>
+    </head>
+    <body bgcolor="gray">
+    <h1 align="center">子域名收集结果报告</h1>
+    <h4 align="right">--by CV</h4>
+    <table border="0" cellspacing="0" cellpadding="0" align="center">
+        <tr><th>目标域名</th><th>子域名</th><th>IP</th></tr>
+`)
+                }
+    if sw == "up" && judge == 0{
+        portResult, err = file.Open(portFileName)
+        die(err)
+        defer portResult.Close()
+        port++
+        det = false
+        portResult.Write(`
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title></title>
+<style type="text/css">
+    table{
+        border-collapse: collapse;
+    }
+            
+    table tr th{
+        border: solid 1px #ccc;
+        height: 30px;
+        width: 200px;
+        background-color: #eee;
+    }
+            
+    table tr td{
+        border: solid 1px #ccc;
+        height: 30px;
+        text-align: center;
+    }
+     
+    table tr:hover
+    {
+        background-color: red;
+    }
+</style>
+</head>
+<body bgcolor="gray">
+<h1 align="center">端口扫描结果报告</h1>
+<h4 align="right">--by CV</h4>
+<table border="0" cellspacing="0" cellpadding="0" align="center">
+<tr><th>IP</th><th>端口</th><th>状态</th><th>指纹</th></tr>
+`)}
+                scanDomain(host,ports,thread,sw,portResult,domainResult,unite,flag,proxy,status,way,det)
+            }
+        }
+    }
+    if port != 0 {
+        portResult.Write(`
+    </table>	
+    </body>
+</html>
+`)
+        log.info("扫描报告已生成,查看路径:%v", portFileName)
+}
+    if domain != 0 {
+        domainResult.Write(`
+    </table>	
+    </body>
+</html>
+`)
+        log.info("扫描报告已生成,查看路径:%v", domainFileName)
+}
+}

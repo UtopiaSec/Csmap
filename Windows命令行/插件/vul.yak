@@ -1,0 +1,113 @@
+//漏扫模块
+log.setLevel("info")
+scanvul = func(target,poc,thread,flag,vulResult,proxy) {
+        vultmpName = "./日志/漏洞扫描临时文件"+flag+poc+".txt"
+        if poc == "" {
+                log.info("启动全面漏扫模块")
+                if len(proxy) == 0 {
+                        res, err := nuclei.Scan(target,nuclei.templatesThreads(thread),nuclei.verbose(true),nuclei.output(vultmpName),nuclei.templatesDir(file.Join(YAK_DIR,"nuclei-templates")))
+                }else{
+                        res, err := nuclei.Scan(target,nuclei.templatesThreads(thread),nuclei.verbose(true),nuclei.output(vultmpName),nuclei.proxy(proxy),nuclei.templatesDir(file.Join(YAK_DIR,"nuclei-templates")))
+                }
+                die(err)
+        }else {
+                log.info("启动单项漏扫模块")
+                if len(proxy) == 0{
+                        res, err := nuclei.Scan(target,nuclei.tags(poc),nuclei.templatesThreads(thread),nuclei.verbose(true),nuclei.output(vultmpName),nuclei.templatesDir(file.Join(YAK_DIR,"nuclei-templates")))
+                }else{
+                        res, err := nuclei.Scan(target,nuclei.tags(poc),nuclei.templatesThreads(thread),nuclei.verbose(true),nuclei.output(vultmpName),nuclei.proxy(proxy),nuclei.templatesDir(file.Join(YAK_DIR,"nuclei-templates")))
+                }
+                die(err)
+                }
+                for result = range res {
+                        data = json.loads(result.RawJson)
+                        for count,rs = range data {
+                                if count == "matched-at" {
+                                payload = rs
+                                }
+                                if count == "template-url"{
+                                pocurl = rs
+                                }
+                        }
+                if result.Severity == "critical" {severity = "严重"}
+                if result.Severity == "high" {severity = "高危"}
+                if result.Severity == "middle" {severity = "中危"}
+                if result.Severity == "low" {severity = "低危"}
+                vulResult.Write(sprintf(`		<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td><a href = "%s">POC检测YAML文件</td></tr>`,target,result.PocName,severity,payload,pocurl))
+                }
+                
+        file.Remove(vultmpName)
+}
+scan = func(scanTargets,dir,poc,thread,flag,proxy) {
+        if dir == ""{
+                if len(scanTargets) <= 0 {
+                die("target参数为空,目标IP/域名为空")
+                }
+                if len(scanTargets) == 1 {
+                        for _,fun = range scanTargets{
+                                fun = str.ReplaceAll(fun,"/","-")
+                                fun = str.ReplaceAll(fun,":","-")
+                                fun = str.ReplaceAll(fun,"?","-")
+                                vulFileName = "./日志/漏洞扫描结果"+"-"+fun+poc+"-"+flag+".html"} 
+                }else{
+                        vulFileName = "./日志/批量漏洞扫描结果"+"-"+flag+".html"     
+                }
+        }else{
+                vulFileName = "./日志/批量漏洞扫描结果"+"-"+flag+".html"
+                rdir,err = file.ReadFile(dir)
+                die(err)
+                result = string(rdir)
+                scanTargets = make([]string)
+                scanTargets = str.ParseStringToLines(result)
+        }
+        vul = 0
+        vulResult,err = file.Open(vulFileName)
+        die(err)
+        vulResult.Write(`
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<title></title>
+		<style type="text/css">
+			table{
+				border-collapse: collapse;
+			}
+			
+			table tr th{
+				border: solid 1px #ccc;
+				height: 30px;
+				width: 200px;
+				background-color: #eee;
+			}
+			
+			table tr td{
+				border: solid 1px #ccc;
+				height: 30px;
+				text-align: center;
+			}
+			
+			table tr:hover
+			{
+				background-color: red;
+			}
+		</style>
+	</head>
+	<body bgcolor="gray">
+	<h1 align="center">漏洞扫描报告</h1>
+	<h4 align="right">--by CV</h4>
+	<table border="0" cellspacing="0" cellpadding="0" align="center">
+		<tr><th>漏扫目标</th><th>漏洞名称</th><th>危害程度</th><th>攻击方法</th><th>POC来源</th></tr>
+`)
+        for count, target = range scanTargets {
+                scanvul(target,poc,thread,flag,vulResult,proxy)
+                vul = vul +1
+        }
+        if vul != 0 {
+        log.info("扫描报告已生成,查看路径:%v", vulFileName)
+        vulResult.Write(`
+    </table>	
+    </body>
+</html>
+`)}
+}

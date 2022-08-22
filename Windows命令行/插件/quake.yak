@@ -1,0 +1,216 @@
+log.setLevel("info")
+//网络空间引擎模块
+scanQuake = func(inquire,ste,count,queryFileName,unite,flag) {
+    rquake,err = file.ReadFile("./WSSE-config/config.txt")
+    die(err)
+    key = string(rquake)
+    queryResult, err = file.Open(queryFileName)
+    die(err)
+    defer queryResult.Close()
+    if unite == "up" {
+        quakeUNI = "./日志/网络空间引擎联动接口数据"+flag+inquire+".txt"
+        quakeUNIResult, err = file.Open(quakeUNI)
+        die(err)
+        defer quakeUNIResult.Close()
+    }else{
+    if unite != "off"{
+        die("unite参数错误,非法字符(只能选择up/off)")
+    }
+    }
+    if ste == "FOFA" || ste == "fofa" || ste == "Fofa" {
+        log.info("启动FOFA网络空间搜索引擎,搜索内容:%s\n",inquire)
+        FOFA_email = string(re.FindSubmatch(key,`Fofa-email\s*:\s*([^\r\n]*)`)[1])
+        FOFA_key = string(re.FindSubmatch(key,`Fofa-key\s*:\s*([^\r\n]*)`)[1])
+        res,err = spacengine.FofaQuery(FOFA_email, FOFA_key, inquire, spacengine.maxRecord(count))
+        die(err)
+        queryResult.Write(`
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<title></title>
+		<style type="text/css">
+			table{
+				border-collapse: collapse;
+			}
+			
+			table tr th{
+				border: solid 1px #ccc;
+				height: 30px;
+				width: 200px;
+				background-color: #eee;
+			}
+			
+			table tr td{
+				border: solid 1px #ccc;
+				height: 30px;
+				text-align: center;
+			}
+			
+			table tr:hover
+			{
+				background-color: red;
+			}
+		</style>
+	</head>
+	<body bgcolor="gray">
+	<h1 align="center">FOFA搜索结果报告</h1>
+	<h4 align="right">--by CV</h4>
+	<table border="0" cellspacing="0" cellpadding="0" align="center">
+		<tr><th>IP地址</th><th>网站标题</th><th>域名</th><th>省份</th><th>城市</th><th>关键字</th></tr>
+`)
+        for result = range res {
+            log.info("\nIP地址:%s\n网站标题:%s\n域名:%s\n省份:%s\n城市:%s\n关键字:%s\n",result.Addr,result.HtmlTitle,result.Domains,result.Province,result.City,result.FromFilter)
+            queryResult.Write(sprintf("		<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>",result.Addr,result.HtmlTitle,result.Domains,result.Province,result.City,result.FromFilter))
+            if unite == "up"{quakeUNIResult.WriteLine(sprintf("%s",result.Addr))}
+        }
+        queryResult.Write(`
+    </table>	
+    </body>
+</html>
+`)
+    }else{
+        if ste == "360Quake" || ste == "360quake" {
+            log.info("启动360Quake网络空间搜索引擎,搜索内容:%s\n",inquire)
+            Quake_key = string(re.FindSubmatch(key,`360Quake-key\s*:\s*([^\r\n]*)`)[1])
+            res,err = spacengine.QuakeQuery(Quake_key, inquire, spacengine.maxRecord(count))
+            die(err)
+            queryResult.Write(`
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<title></title>
+		<style type="text/css">
+			table{
+				border-collapse: collapse;
+			}
+			
+			table tr th{
+				border: solid 1px #ccc;
+				height: 30px;
+				width: 200px;
+				background-color: #eee;
+			}
+			
+			table tr td{
+				border: solid 1px #ccc;
+				height: 30px;
+				text-align: center;
+			}
+			
+			table tr:hover
+			{
+				background-color: red;
+			}
+		</style>
+	</head>
+	<body bgcolor="gray">
+	<h1 align="center">360Quake搜索结果报告</h1>
+	<h4 align="right">--by CV</h4>
+	<table border="0" cellspacing="0" cellpadding="0" align="center">
+		<tr><th>IP地址</th><th>网站标题</th><th>域名</th><th>省份</th><th>城市</th><th>指纹识别</th></tr>
+`)
+            for result = range res {
+                log.info("\nIP地址:%s\n网站标题:%s\n域名:%s\n省份:%s\n城市:%s\n指纹识别:%s\n",result.Addr,result.HtmlTitle,result.Domains,result.Province,result.City,result.Fingerprints)
+                queryResult.WriteLine(sprintf("		<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>",result.Addr,result.HtmlTitle,result.Domains,result.Province,result.City,result.Fingerprints))
+                if unite == "up"{quakeUNIResult.WriteLine(sprintf("%s",result.Addr))}
+            }
+            queryResult.Write(`
+    </table>	
+    </body>
+</html>
+`)
+        }else{
+            if ste == "Shodan" || ste == "shodan" {
+                log.info("启动Shodan网络空间搜索引擎,搜索内容:%s\n",inquire)
+                Shodan_key = string(re.FindSubmatch(key,`Shodan-key\s*:\s*([^\r\n]*)`)[1])
+                res,err = spacengine.ShodanQuery(Shodan_key, inquire, spacengine.maxRecord(count))
+                die(err)
+                queryResult.Write(`
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<title></title>
+		<style type="text/css">
+			table{
+				border-collapse: collapse;
+			}
+			
+			table tr th{
+				border: solid 1px #ccc;
+				height: 30px;
+				width: 200px;
+				background-color: #eee;
+			}
+			
+			table tr td{
+				border: solid 1px #ccc;
+				height: 30px;
+				text-align: center;
+			}
+			
+			table tr:hover
+			{
+				background-color: red;
+			}
+		</style>
+	</head>
+	<body bgcolor="gray">
+	<h1 align="center">Shodan搜索结果报告</h1>
+	<h4 align="right">--by CV</h4>
+	<table border="0" cellspacing="0" cellpadding="0" align="center">
+		<tr><th>IP地址</th><th>域名</th><th>城市</th><th>响应情况</th></tr>
+`)
+                for result = range res {
+                    log.info("\nIP地址:%s\n\n域名:%s\n城市:%s\n响应数据:%s\n",result.Addr,result.Domains,result.City,result.Banner)
+                    if str.Contains(result.Banner,`\x20200\x20OK`) {status_code = "200"}else{status_code = "无法访问"}
+                    queryResult.WriteLine(sprintf("		<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>",result.Addr,result.Domains,result.City,status_code))
+                    if unite == "up"{quakeUNIResult.WriteLine(sprintf("%s",result.Addr))}
+                    }
+                queryResult.Write(`
+    </table>	
+    </body>
+</html>
+`)
+                }else{
+                    log.Error("网络空间搜索引擎选择不正确")
+                }
+            }
+        }
+    
+}
+scan = func(inquire,dir,ste,count,flag,unite){
+    if ste == "" {
+        die("ste参数为空,未选择搜索引擎")
+    }
+    if count <= 0 {
+        count = 100
+    }
+    quake = 0
+    if inquire == "" {
+        if dir == ""{
+                die("inquire参数为空,无搜索内容")
+        }else{
+            rdir,err = file.ReadFile(dir)
+            die(err)
+            result = string(rdir)
+            scanTargets = make([]string)
+            scanTargets = str.ParseStringToLines(result)
+            for _,inquire = range scanTargets{
+                modelFileName = "./日志/空间引擎批量查询结果"+"-"+inquire+"-"+flag
+                queryFileName = modelFileName + ".html"
+                scanQuake(inquire,ste,count,queryFileName,unite,flag)
+                quake = quake + 1
+            }
+        }
+        }else{
+            modelFileName = "./日志/空间引擎查询结果"+"-"+inquire+"-"+flag
+            queryFileName = modelFileName + ".html"
+            scanQuake(inquire,ste,count,queryFileName,unite,flag)
+            quake = quake + 1
+        }
+    if quake != 0{
+        log.info("扫描报告已生成,查看路径:%v", queryFileName)}
+}
